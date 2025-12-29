@@ -1,3 +1,4 @@
+
 import { STORAGE_KEY } from "@/app/constant";
 import { SyncStore } from "@/app/store/sync";
 import { chunks } from "../format";
@@ -14,59 +15,85 @@ export function createUpstashClient(store: SyncStore) {
   const proxyUrl =
     store.useProxy && store.proxyUrl.length > 0 ? store.proxyUrl : undefined;
 
+  const baseHeaders: Record<string, string> = {
+    Authorization: `Bearer ${config.apiKey}`,
+    Accept: "application/json",
+  };
+
   return {
     async check() {
       try {
         const res = await fetch(this.path(`get/${storeKey}`, proxyUrl), {
           method: "GET",
-          headers: this.headers(),
+          headers: baseHeaders,
         });
         console.log("[Upstash] check", res.status, res.statusText);
-        return [200].includes(res.status);
+        return res.ok;
       } catch (e) {
         console.error("[Upstash] failed to check", e);
+        return false;
       }
-      return false;
     },
 
     async redisGet(key: string) {
       const res = await fetch(this.path(`get/${key}`, proxyUrl), {
         method: "GET",
-        headers: this.headers(),
+        headers: baseHeaders,
       });
 
-      console.log("[Upstash] get key = ", key, res.status, res.statusText);
-      const resJson = (await res.json()) as { result: string };
+      console.log("[Upstash] get key =", key, res.status, res.statusText);
 
-      return resJson.result;
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        throw new Error(
+          `[Upstash] GET ${key} failed: ${res.status} ${res.statusText} ${errText}`,
+        );
+      }
+
+      const resJson = (await res.json()) as { result?: string | null };
+      return typeof resJson?.result === "string" ? resJson.result : "";
     },
 
     async redisSet(key: string, value: string) {
       const res = await fetch(this.path(`set/${key}`, proxyUrl), {
         method: "POST",
-        headers: this.headers(),
-        body: JSON.stringify({ value }), // <-- 直接修正這裡
+        headers: {
+          ...baseHeaders,
+          "Content-Type": "application/json; charset=utf-8",
+        },
+        body: JSON.stringify({ value }),
       });
 
-      console.log("[Upstash] set key = ", key, res.status, res.statusText);
+      console.log("[Upstash] set key =", key, res.status, res.statusText);
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        throw new Error(
+          `[Upstash] SET ${key} failed: ${res.status} ${res.statusText} ${errText}`,
+        );
+      }
     },
 
     async get() {
-      const chunkCount = Number(await this.redisGet(chunkCountKey));
-      if (!Number.isInteger(chunkCount)) return;
+      const chunkCountRaw = await this.redisGet(chunkCountKey);
+      const chunkCount = Number(chunkCountRaw);
+
+      if (!Number.isInteger(chunkCount) || chunkCount <= 0) {
+        console.warn("[Upstash] invalid chunkCount:", chunkCountRaw);
+        return "";
+      }
 
       const chunksArr = await Promise.all(
-        new Array(chunkCount)
-          .fill(0)
-          .map((_, i) => this.redisGet(chunkIndexKey(i))),
+        Array.from({ length: chunkCount }, (_, i) =>
+          this.redisGet(chunkIndexKey(i)),
+        ),
       );
-      console.log("[Upstash] get full chunks", chunksArr);
+
       return chunksArr.join("");
     },
 
     async set(_: string, value: string) {
       let index = 0;
-      // 用同步 generator
       for (const chunk of chunks(value)) {
         await this.redisSet(chunkIndexKey(index), chunk);
         index += 1;
@@ -75,10 +102,10 @@ export function createUpstashClient(store: SyncStore) {
     },
 
     headers() {
-      return {
-        Authorization: `Bearer ${config.apiKey}`,
-      };
+      // 保留原方法以維持舊呼叫介面
+      return baseHeaders;
     },
+
     path(path: string, proxyUrl: string = "") {
       if (!path.endsWith("/")) {
         path += "/";
@@ -91,19 +118,22 @@ export function createUpstashClient(store: SyncStore) {
         proxyUrl += "/";
       }
 
-      let url;
       const pathPrefix = "/api/upstash/";
 
       try {
-        let u = new URL(proxyUrl + pathPrefix + path);
+        const u = new URL((proxyUrl || "") + pathPrefix + path);
         // add query params
         u.searchParams.append("endpoint", config.endpoint);
-        url = u.toString();
-      } catch (e) {
-        url = pathPrefix + path + "?endpoint=" + config.endpoint;
+        return u.toString();
+      } catch {
+        // Fallback：避免 URL 解析失敗
+        return (
+          pathPrefix +
+          path +
+          "?endpoint=" +
+          encodeURIComponent(config.endpoint)
+        );
       }
-
-      return url;
     },
   };
 }
