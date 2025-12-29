@@ -30,7 +30,7 @@ export function prettyObject(msg: any) {
  * - 確保每片 byte 長度 <= maxBytes
  * - 不切斷 surrogate pair / emoji
  */
-export function* chunks(s: string, maxBytes: number = 900 * 1024): Generator<string> {
+export function* chunks(s: string, maxBytes: number = 700 * 1024): Generator<string> {
   const encoder = new TextEncoder();
 
   let chunkChars: string[] = [];
