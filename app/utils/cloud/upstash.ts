@@ -20,14 +20,18 @@ export function createUpstashClient(store: SyncStore) {
     Accept: "application/json",
   };
 
+  const enc = new TextEncoder();
+  const byteLen = (s: string) => enc.encode(s).length;
+
   return {
     async check() {
       try {
-        const res = await fetch(this.path(`get/${storeKey}`, proxyUrl), {
+        const url = this.path(`get/${encodeURIComponent(storeKey)}`, proxyUrl);
+        const res = await fetch(url, {
           method: "GET",
           headers: baseHeaders,
         });
-        console.log("[Upstash] check", res.status, res.statusText);
+        console.log("[Upstash] check", res.status, res.statusText, "url:", url);
         return res.ok;
       } catch (e) {
         console.error("[Upstash] failed to check", e);
@@ -36,12 +40,15 @@ export function createUpstashClient(store: SyncStore) {
     },
 
     async redisGet(key: string) {
-      const res = await fetch(this.path(`get/${key}`, proxyUrl), {
+      const safeKey = encodeURIComponent(key);
+      const url = this.path(`get/${safeKey}`, proxyUrl);
+
+      const res = await fetch(url, {
         method: "GET",
         headers: baseHeaders,
       });
 
-      console.log("[Upstash] get key =", key, res.status, res.statusText);
+      console.log("[Upstash] GET key =", key, "url:", url, res.status, res.statusText);
 
       if (!res.ok) {
         const errText = await res.text().catch(() => "");
@@ -51,11 +58,16 @@ export function createUpstashClient(store: SyncStore) {
       }
 
       const resJson = (await res.json()) as { result?: string | null };
-      return typeof resJson?.result === "string" ? resJson.result : "";
+      const value = typeof resJson?.result === "string" ? resJson.result : "";
+      console.log("[Upstash] GET result length =", value.length, "bytes =", byteLen(value));
+      return value;
     },
 
     async redisSet(key: string, value: string) {
-      const res = await fetch(this.path(`set/${key}`, proxyUrl), {
+      const safeKey = encodeURIComponent(key);
+      const url = this.path(`set/${safeKey}`, proxyUrl);
+
+      const res = await fetch(url, {
         method: "POST",
         headers: {
           ...baseHeaders,
@@ -64,7 +76,15 @@ export function createUpstashClient(store: SyncStore) {
         body: JSON.stringify({ value }),
       });
 
-      console.log("[Upstash] set key =", key, res.status, res.statusText);
+      console.log(
+        "[Upstash] SET key =",
+        key,
+        "len =", value.length,
+        "bytes =", byteLen(value),
+        "url:", url,
+        res.status,
+        res.statusText,
+      );
 
       if (!res.ok) {
         const errText = await res.text().catch(() => "");
@@ -83,22 +103,43 @@ export function createUpstashClient(store: SyncStore) {
         return "";
       }
 
-      const chunksArr = await Promise.all(
-        Array.from({ length: chunkCount }, (_, i) =>
-          this.redisGet(chunkIndexKey(i)),
+      console.log("[Upstash] get() chunkCount =", chunkCount);
+
+      const keys = Array.from({ length: chunkCount }, (_, i) => chunkIndexKey(i));
+      console.log("[Upstash] get() keys =", keys);
+
+      const chunksArr = await Promise.all(keys.map((k) => this.redisGet(k)));
+
+      chunksArr.forEach((c, i) =>
+        console.log(
+          `[Upstash] get() chunk[${i}] charLen=${c.length} byteLen=${byteLen(c)}`,
         ),
       );
 
-      return chunksArr.join("");
+      const joined = chunksArr.join("");
+      console.log(
+        "[Upstash] get() joined charLen =",
+        joined.length,
+        "byteLen =",
+        byteLen(joined),
+      );
+
+      return joined;
     },
 
     async set(_: string, value: string) {
-      let index = 0;
-      for (const chunk of chunks(value)) {
-        await this.redisSet(chunkIndexKey(index), chunk);
-        index += 1;
+      // 先完整分片再寫入，避免 chunkCount 與實際片數不一致
+      const parts = Array.from(chunks(value));
+      console.log("[Upstash] set() total parts =", parts.length);
+
+      for (let i = 0; i < parts.length; i++) {
+        const key = chunkIndexKey(i);
+        const part = parts[i];
+        await this.redisSet(key, part);
       }
-      await this.redisSet(chunkCountKey, index.toString());
+
+      await this.redisSet(chunkCountKey, String(parts.length));
+      console.log("[Upstash] set() chunkCountKey =", chunkCountKey, "=", parts.length);
     },
 
     headers() {
@@ -106,34 +147,19 @@ export function createUpstashClient(store: SyncStore) {
       return baseHeaders;
     },
 
-    path(path: string, proxyUrl: string = "") {
-      if (!path.endsWith("/")) {
-        path += "/";
-      }
-      if (path.startsWith("/")) {
-        path = path.slice(1);
-      }
+    path(segment: string, proxyUrl: string = "") {
+      // 乾淨處理：不強制加尾斜線，避免路由把最後一段當成空 segment
+      const basePrefix = "/api/upstash";
 
-      if (proxyUrl.length > 0 && !proxyUrl.endsWith("/")) {
-        proxyUrl += "/";
-      }
+      const base =
+        (proxyUrl ? proxyUrl.replace(/\/+$/g, "") : "") + basePrefix;
 
-      const pathPrefix = "/api/upstash/";
+      const seg = segment.replace(/^\/+|\/+$/g, "");
 
-      try {
-        const u = new URL((proxyUrl || "") + pathPrefix + path);
-        // add query params
-        u.searchParams.append("endpoint", config.endpoint);
-        return u.toString();
-      } catch {
-        // Fallback：避免 URL 解析失敗
-        return (
-          pathPrefix +
-          path +
-          "?endpoint=" +
-          encodeURIComponent(config.endpoint)
-        );
-      }
+      // 用 query 帶 endpoint，並且 encode
+      const url = `${base}/${seg}?endpoint=${encodeURIComponent(config.endpoint)}`;
+
+      return url;
     },
   };
 }
