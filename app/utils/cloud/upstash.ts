@@ -40,8 +40,7 @@ export function createUpstashClient(store: SyncStore) {
 
       return resJson.result;
     },
-
-    async redisSet(key: string, value: string) {
+/*   async redisSet(key: string, value: string) {
       const res = await fetch(this.path(`set/${key}`, proxyUrl), {
         method: "POST",
         headers: this.headers(),
@@ -50,7 +49,15 @@ export function createUpstashClient(store: SyncStore) {
 
       console.log("[Upstash] set key = ", key, res.status, res.statusText);
     },
-
+*/
+    async redisSet(key: string, value: string) {
+      const res = await fetch(this.path(`set/${key}`, proxyUrl), {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify({ value }),
+      });
+      console.log("[Upstash] set key = ", key, res.status, res.statusText);
+    }
     async get() {
       const chunkCount = Number(await this.redisGet(chunkCountKey));
       if (!Number.isInteger(chunkCount)) return;
@@ -63,8 +70,7 @@ export function createUpstashClient(store: SyncStore) {
       console.log("[Upstash] get full chunks", chunks);
       return chunks.join("");
     },
-
-    async set(_: string, value: string) {
+/*   async set(_: string, value: string) {
       // upstash limit the max request size which is 1Mb for “Free” and “Pay as you go”
       // so we need to split the data to chunks
       let index = 0;
@@ -75,8 +81,18 @@ export function createUpstashClient(store: SyncStore) {
       await this.redisSet(chunkCountKey, index.toString());
     },
 
-    headers() {
-      return {
+     */
+    
+    async set(_: string, value: string) {
+    let index = 0;
+    for (const chunk of safeChunks(value)) {
+      console.log("Set chunk", index, "length=", chunk.length, "bytes=", (new TextEncoder()).encode(chunk).length);
+      await this.redisSet(chunkIndexKey(index), chunk);
+      index += 1;
+    }
+    await this.redisSet(chunkCountKey, index.toString());
+  }
+      headers() {     return {
         Authorization: `Bearer ${config.apiKey}`,
       };
     },
