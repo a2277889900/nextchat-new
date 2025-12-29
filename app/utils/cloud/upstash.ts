@@ -40,59 +40,42 @@ export function createUpstashClient(store: SyncStore) {
 
       return resJson.result;
     },
-/*   async redisSet(key: string, value: string) {
-      const res = await fetch(this.path(`set/${key}`, proxyUrl), {
-        method: "POST",
-        headers: this.headers(),
-        body: value,
-      });
 
-      console.log("[Upstash] set key = ", key, res.status, res.statusText);
-    },
-*/
     async redisSet(key: string, value: string) {
       const res = await fetch(this.path(`set/${key}`, proxyUrl), {
         method: "POST",
         headers: this.headers(),
-        body: JSON.stringify({ value }),
+        body: JSON.stringify({ value }), // <-- 直接修正這裡
       });
+
       console.log("[Upstash] set key = ", key, res.status, res.statusText);
-    }
+    },
+
     async get() {
       const chunkCount = Number(await this.redisGet(chunkCountKey));
       if (!Number.isInteger(chunkCount)) return;
 
-      const chunks = await Promise.all(
+      const chunksArr = await Promise.all(
         new Array(chunkCount)
           .fill(0)
           .map((_, i) => this.redisGet(chunkIndexKey(i))),
       );
-      console.log("[Upstash] get full chunks", chunks);
-      return chunks.join("");
+      console.log("[Upstash] get full chunks", chunksArr);
+      return chunksArr.join("");
     },
-/*   async set(_: string, value: string) {
-      // upstash limit the max request size which is 1Mb for “Free” and “Pay as you go”
-      // so we need to split the data to chunks
+
+    async set(_: string, value: string) {
       let index = 0;
-      for await (const chunk of chunks(value)) {
+      // 用同步 generator
+      for (const chunk of chunks(value)) {
         await this.redisSet(chunkIndexKey(index), chunk);
         index += 1;
       }
       await this.redisSet(chunkCountKey, index.toString());
     },
 
-     */
-    
-    async set(_: string, value: string) {
-    let index = 0;
-    for (const chunk of safeChunks(value)) {
-      console.log("Set chunk", index, "length=", chunk.length, "bytes=", (new TextEncoder()).encode(chunk).length);
-      await this.redisSet(chunkIndexKey(index), chunk);
-      index += 1;
-    }
-    await this.redisSet(chunkCountKey, index.toString());
-  }
-      headers() {     return {
+    headers() {
+      return {
         Authorization: `Bearer ${config.apiKey}`,
       };
     },
