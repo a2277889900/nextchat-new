@@ -11,6 +11,7 @@ describe("isModelNotavailableInServer", () => {
       providerNames,
     );
     expect(result).toBe(false);
+    
   });
 
   test("test model will return true when model is not available in custom models", () => {
