@@ -2,24 +2,28 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "Azure AI Image Generation - FLUX.2-pro (Minimal)",
-    "version": "1.0.0"
+    "title": "Azure Cognitive Services - Black Forest Labs FLUX.2-pro",
+    "version": "1.0.0",
+    "description": "Text-to-Image generation via Azure Cognitive Services providers/blackforestlabs FLUX-2-pro endpoint"
   },
   "servers": [
     {
-      "url": "https://hsin-mghqki48-eastus2.cognitiveservices.azure.com/"
+      "url": "https://hsin-mghqki48-eastus2.services.ai.azure.com/providers/blackforestlabs/v1/flux-2-pro?api-version=preview"
     }
   ],
   "paths": {
-    "/openai/deployments/deployment-id/images/generations": {
+    "/providers/blackforestlabs/v1/flux-2-pro": {
       "post": {
-        "operationId": "generateImage",
+        "operationId": "flux2ProGenerate",
+        "summary": "Generate image (Text-to-Image) with FLUX.2-pro",
+        "description": "POST to the Azure BlackForestLabs v1 flux-2-pro endpoint. Returns base64 image(s) in data[].b64_json.",
         "parameters": [
           {
             "name": "api-version",
             "in": "query",
             "required": true,
-            "schema": { "type": "string", "default": "2024-02-15-preview" }
+            "schema": { "type": "string", "default": "preview" },
+            "description": "API version. Use 'preview' per Azure documentation."
           }
         ],
         "requestBody": {
@@ -28,11 +32,38 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["prompt"],
+                "required": ["prompt", "size", "n", "model"],
                 "properties": {
-                  "prompt": { "type": "string" },
-                  "size": { "type": "string", "default": "1024x1024" },
-                  "n": { "type": "integer", "default": 1, "minimum": 1, "maximum": 8 }
+                  "prompt": { "type": "string", "description": "Text prompt for image generation" },
+                  "size": { "type": "string", "description": "WIDTHxHEIGHT (e.g., 1024x1024)", "default": "1024x1024" },
+                  "n": { "type": "integer", "description": "Number of images to generate", "default": 1, "minimum": 1, "maximum": 8 },
+                  "model": { "type": "string", "description": "Model name. Must be 'flux.2-pro'", "default": "flux.2-pro", "enum": ["flux.2-pro"] },
+                  "guidance_scale": { "type": "number", "description": "Optional: CFG scale (prompt adherence)" },
+                  "num_inference_steps": { "type": "integer", "description": "Optional: Number of inference steps" },
+                  "seed": { "type": "integer", "description": "Optional: Seed for reproducibility" }
+                }
+              },
+              "examples": {
+                "basic": {
+                  "summary": "Minimal generation",
+                  "value": {
+                    "prompt": "A photograph of a red fox in an autumn forest",
+                    "size": "1024x1024",
+                    "n": 1,
+                    "model": "flux.2-pro"
+                  }
+                },
+                "advanced": {
+                  "summary": "Advanced with CFG and steps",
+                  "value": {
+                    "prompt": "A futuristic cityscape at sunset, ultra-detailed, cinematic lighting",
+                    "size": "1024x1024",
+                    "n": 2,
+                    "model": "flux.2-pro",
+                    "guidance_scale": 4.5,
+                    "num_inference_steps": 36,
+                    "seed": 12345
+                  }
                 }
               }
             }
@@ -40,19 +71,22 @@
         },
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "Generation successful",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "created": { "type": "integer" },
+                    "created": { "type": "integer", "description": "Unix timestamp (seconds) if provided" },
                     "data": {
                       "type": "array",
                       "items": {
                         "type": "object",
-                        "properties": { "url": { "type": "string" } },
-                        "required": ["url"]
+                        "properties": {
+                          "b64_json": { "type": "string", "description": "Base64-encoded image data" },
+                          "mime_type": { "type": "string", "description": "Optional MIME type (e.g., image/png)" }
+                        },
+                        "required": ["b64_json"]
                       }
                     }
                   },
@@ -61,11 +95,12 @@
               }
             }
           },
-          "400": { "description": "Bad request" },
-          "401": { "description": "Unauthorized" }
+          "400": { "description": "Bad request (invalid parameters)" },
+          "401": { "description": "Unauthorized (missing or invalid Bearer token)" },
+          "429": { "description": "Rate limit exceeded" },
+          "500": { "description": "Server error" }
         }
       }
     }
   }
 }
-
