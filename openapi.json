@@ -1,35 +1,81 @@
 
 {
-  "openapi": "3.1.0",
+  "openapi": "3.0.3",
   "info": {
-    "title": "Azure AI Image Generation - FLUX.2-pro",
-    "description": "Generate images using FLUX.2-pro deployed on Azure AI Studio",
-    "version": "v1.0.0"
+    "title": "Azure AI Image Generation - FLUX.2-pro (Minimal)",
+    "version": "1.0.0"
   },
   "servers": [
     {
-      "url": "https://hsin-mghqki48-eastus2.services.ai.azure.com/"
-    }
-  ],
-  "security": [
-    {
-      "ApiKeyAuth": []
-    }
-  ],
-  "components": {
-    "securitySchemes": {
-      "ApiKeyAuth": {
-        "type": "apiKey",
-        "in": "header",
-        "name": "api-key",
-        "description": "Provide your Azure AI resource key via header: api-key: YOUR_KEY"
+      "url": "https://{your-resource-name}.openai.azure.com",
+      "variables": {
+        "your-resource-name": {
+          "default": "your-resource",
+          "description": "Azure AI resource name"
+        }
       }
-    },
-    "schemas": {
-      "TextToImageRequest": {
-        "type": "object",
-        "required": ["prompt"],
-        "properties": {
-          "prompt": {
-            "type": "string",
-            "description": "Text description for image generation"
+    }
+  ],
+  "paths": {
+    "/openai/deployments/{deployment-id}/images/generations": {
+      "post": {
+        "operationId": "generateImage",
+        "parameters": [
+          {
+            "name": "deployment-id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Azure deployment ID for FLUX.2-pro"
+          },
+          {
+            "name": "api-version",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "default": "2024-02-15-preview" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["prompt"],
+                "properties": {
+                  "prompt": { "type": "string" },
+                  "size": { "type": "string", "default": "1024x1024" },
+                  "n": { "type": "integer", "default": 1, "minimum": 1, "maximum": 8 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": { "type": "integer" },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": { "url": { "type": "string" } },
+                        "required": ["url"]
+                      }
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
