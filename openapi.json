@@ -1,0 +1,35 @@
+
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Azure AI Image Generation - FLUX.2-pro",
+    "description": "Generate images using FLUX.2-pro deployed on Azure AI Studio",
+    "version": "v1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://hsin-mghqki48-eastus2.services.ai.azure.com/"
+    }
+  ],
+  "security": [
+    {
+      "ApiKeyAuth": []
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "api-key",
+        "description": "Provide your Azure AI resource key via header: api-key: YOUR_KEY"
+      }
+    },
+    "schemas": {
+      "TextToImageRequest": {
+        "type": "object",
+        "required": ["prompt"],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "description": "Text description for image generation"
