@@ -2,9 +2,9 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "Azure Cognitive Services - Black Forest Labs FLUX.2-pro",
-    "version": "1.0.0",
-    "description": "Text-to-Image generation via Azure Cognitive Services providers/blackforestlabs FLUX-2-pro endpoint"
+    "title": "Azure Cognitive Services - Black Forest Labs FLUX.2-pro (Render-Friendly)",
+    "version": "1.0.1",
+    "description": "FLUX.2-pro text-to-image via Azure providers/blackforestlabs API. Schema includes a render-friendly data URI field."
   },
   "servers": [
     {
@@ -16,14 +16,14 @@
       "post": {
         "operationId": "flux2ProGenerate",
         "summary": "Generate image (Text-to-Image) with FLUX.2-pro",
-        "description": "POST to the Azure BlackForestLabs v1 flux-2-pro endpoint. Returns base64 image(s) in data[].b64_json.",
+        "description": "Returns base64 in data[].b64_json, plus a render-friendly data URI field for direct image display in clients that support it.",
         "parameters": [
           {
             "name": "api-version",
             "in": "query",
             "required": true,
             "schema": { "type": "string", "default": "preview" },
-            "description": "API version. Use 'preview' per Azure documentation."
+            "description": "Use 'preview' per Azure docs."
           }
         ],
         "requestBody": {
@@ -35,12 +35,36 @@
                 "required": ["prompt", "size", "n", "model"],
                 "properties": {
                   "prompt": { "type": "string", "description": "Text prompt for image generation" },
-                  "size": { "type": "string", "description": "WIDTHxHEIGHT (e.g., 1024x1024)", "default": "1024x1024" },
-                  "n": { "type": "integer", "description": "Number of images to generate", "default": 1, "minimum": 1, "maximum": 8 },
-                  "model": { "type": "string", "description": "Model name. Must be 'flux.2-pro'", "default": "flux.2-pro", "enum": ["flux.2-pro"] },
-                  "guidance_scale": { "type": "number", "description": "Optional: CFG scale (prompt adherence)" },
-                  "num_inference_steps": { "type": "integer", "description": "Optional: Number of inference steps" },
-                  "seed": { "type": "integer", "description": "Optional: Seed for reproducibility" }
+                  "size": {
+                    "type": "string",
+                    "description": "WIDTHxHEIGHT (e.g., 1024x1024)",
+                    "default": "1024x1024"
+                  },
+                  "n": {
+                    "type": "integer",
+                    "description": "Number of images to generate",
+                    "default": 1,
+                    "minimum": 1,
+                    "maximum": 8
+                  },
+                  "model": {
+                    "type": "string",
+                    "description": "Model name. Must be 'flux.2-pro'",
+                    "default": "flux.2-pro",
+                    "enum": ["flux.2-pro"]
+                  },
+                  "guidance_scale": {
+                    "type": "number",
+                    "description": "Optional: CFG scale (prompt adherence)"
+                  },
+                  "num_inference_steps": {
+                    "type": "integer",
+                    "description": "Optional: Number of inference steps"
+                  },
+                  "seed": {
+                    "type": "integer",
+                    "description": "Optional: Seed for reproducibility"
+                  }
                 }
               },
               "examples": {
@@ -54,7 +78,7 @@
                   }
                 },
                 "advanced": {
-                  "summary": "Advanced with CFG and steps",
+                  "summary": "With CFG, steps, and seed",
                   "value": {
                     "prompt": "A futuristic cityscape at sunset, ultra-detailed, cinematic lighting",
                     "size": "1024x1024",
@@ -77,26 +101,56 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "created": { "type": "integer", "description": "Unix timestamp (seconds) if provided" },
+                    "created": {
+                      "type": "integer",
+                      "description": "Unix timestamp (seconds) if provided"
+                    },
                     "data": {
                       "type": "array",
+                      "description": "Original data array from provider",
                       "items": {
                         "type": "object",
                         "properties": {
-                          "b64_json": { "type": "string", "description": "Base64-encoded image data" },
-                          "mime_type": { "type": "string", "description": "Optional MIME type (e.g., image/png)" }
+                          "b64_json": {
+                            "type": "string",
+                            "description": "Base64-encoded image (PNG/JPEG)."
+                          },
+                          "mime_type": {
+                            "type": "string",
+                            "description": "Optional MIME type, e.g. image/png"
+                          }
                         },
                         "required": ["b64_json"]
                       }
+                    },
+                    "image_data_uri": {
+                      "type": "string",
+                      "description": "Render-friendly data URI (data:image/png;base64,...) built from data[0].b64_json. Some clients render this directly.",
+                      "example": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
                     }
                   },
                   "required": ["data"]
+                },
+                "examples": {
+                  "renderable": {
+                    "summary": "Response with data URI",
+                    "value": {
+                      "created": 1736572800,
+                      "data": [
+                        {
+                          "b64_json": "<base64-string-truncated>",
+                          "mime_type": "image/png"
+                        }
+                      ],
+                      "image_data_uri": "data:image/png;base64,<base64-string-truncated>"
+                    }
+                  }
                 }
               }
             }
           },
           "400": { "description": "Bad request (invalid parameters)" },
-          "401": { "description": "Unauthorized (missing or invalid Bearer token)" },
+          "401": { "description": "Unauthorized (missing/invalid Bearer token)" },
           "429": { "description": "Rate limit exceeded" },
           "500": { "description": "Server error" }
         }
