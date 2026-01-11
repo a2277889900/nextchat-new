@@ -7,7 +7,7 @@
   },
   "servers": [
     {
-      "url": "https://hsin-mghqki48-eastus2.services.ai.azure.com/"
+      "url": "https://hsin-mghqki48-eastus2.cognitiveservices.azure.com/"
     }
   ],
   "paths": {
@@ -68,3 +68,4 @@
     }
   }
 }
+
